@@ -24,11 +24,17 @@ func init() {
 	registerToolHandler("GetFollowedStocks", handleGetFollowedStocks)
 	registerToolHandler("GetAIAnalysisHistory", handleGetAIAnalysisHistory)
 	registerToolHandler("GetAIAnalysisDetail", handleGetAIAnalysisDetail)
+	registerToolHandler("GetTradingRecordList", handleGetTradingRecordList)
+	registerToolHandler("GetTradingRecordStatistics", handleGetTradingRecordStatistics)
 	registerToolHandler("GetAIAnalysisContent", handleGetAIAnalysisContent)
 	registerToolHandler("GetHotStockList", handleGetHotStockList)
 	registerToolHandler("GetHotEventList", handleGetHotEventList)
 	registerToolHandler("GetIndustryMoneyRank", handleGetIndustryMoneyRank)
 	registerToolHandler("GetLongTigerList", handleGetLongTigerList)
+	registerToolHandler("GetLhbSeatDetail", handleGetLhbSeatDetail)
+	registerToolHandler("GetPolicyNewsList", handleGetPolicyNewsList)
+	registerToolHandler("GetPolicyNewsDetail", handleGetPolicyNewsDetail)
+	registerToolHandler("SearchGovPolicyLibrary", handleSearchGovPolicyLibrary)
 	registerToolHandler("GetEconomicData", handleGetEconomicData)
 	registerToolHandler("GetInvestCalendar", handleGetInvestCalendar)
 	registerToolHandler("GetStockNotice", handleGetStockNoticeTool)
@@ -50,6 +56,7 @@ func init() {
 	registerToolHandler("FinanceSearch", handleFinanceSearch)
 	registerToolHandler("FinancialQA", handleFinancialQA)
 	registerToolHandler("GetStockLatestFinance", handleGetStockLatestFinance)
+	registerToolHandler("GetHKStockLatestFinance", handleGetHKStockLatestFinance)
 	registerToolHandler("GetStockQtrMainFinance", handleGetStockQtrMainFinance)
 	registerToolHandler("GetStockOrgPredict", handleGetStockOrgPredict)
 	registerToolHandler("GetStockPredictSummary", handleGetStockPredictSummary)
@@ -278,6 +285,45 @@ func handleGetAIAnalysisContent(o *OpenAi, funcArguments string, ctx *ToolContex
 	return nil
 }
 
+func handleGetTradingRecordList(o *OpenAi, funcArguments string, ctx *ToolContext) error {
+	sendToolCallLog(ctx, "GetTradingRecordList", funcArguments)
+	page := gjson.Get(funcArguments, "page").Int()
+	pageSize := gjson.Get(funcArguments, "pageSize").Int()
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 || pageSize > 50 {
+		pageSize = 20
+	}
+	res, err := NewStockDataApi().GetTradingRecordList(TradingRecordListQuery{
+		Keyword:   gjson.Get(funcArguments, "keyword").String(),
+		Direction: gjson.Get(funcArguments, "direction").String(),
+		StartDate: gjson.Get(funcArguments, "startDate").String(),
+		EndDate:   gjson.Get(funcArguments, "endDate").String(),
+		Page:      int(page),
+		PageSize:  int(pageSize),
+	})
+	if err != nil {
+		appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, "查询交易日志失败: "+err.Error())
+		return nil
+	}
+	jsonBytes, _ := json.Marshal(res)
+	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, string(jsonBytes))
+	return nil
+}
+
+func handleGetTradingRecordStatistics(o *OpenAi, funcArguments string, ctx *ToolContext) error {
+	sendToolCallLog(ctx, "GetTradingRecordStatistics", funcArguments)
+	res, err := NewStockDataApi().GetTradingRecordStatistics()
+	if err != nil {
+		appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, "查询交易日志统计失败: "+err.Error())
+		return nil
+	}
+	jsonBytes, _ := json.Marshal(res)
+	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, string(jsonBytes))
+	return nil
+}
+
 func handleGetHotStockList(o *OpenAi, funcArguments string, ctx *ToolContext) error {
 	sendToolCallLog(ctx, "GetHotStockList", funcArguments)
 	marketType := gjson.Get(funcArguments, "marketType").String()
@@ -331,6 +377,62 @@ func handleGetLongTigerList(o *OpenAi, funcArguments string, ctx *ToolContext) e
 	res := NewMarketNewsApi().LongTiger(date)
 	jsonBytes, _ := json.Marshal(res)
 	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, string(jsonBytes))
+	return nil
+}
+
+func handleGetLhbSeatDetail(o *OpenAi, funcArguments string, ctx *ToolContext) error {
+	sendToolCallLog(ctx, "GetLhbSeatDetail", funcArguments)
+	stockCode := gjson.Get(funcArguments, "stockCode").String()
+	if stockCode == "" {
+		appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, "参数 stockCode 不能为空")
+		return nil
+	}
+	date := gjson.Get(funcArguments, "date").String()
+	res := NewLhbSeatApi().GetLhbSeatDetail(stockCode, date)
+	jsonBytes, _ := json.Marshal(res)
+	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, string(jsonBytes))
+	return nil
+}
+
+func handleGetPolicyNewsList(o *OpenAi, funcArguments string, ctx *ToolContext) error {
+	sendToolCallLog(ctx, "GetPolicyNewsList", funcArguments)
+	department := gjson.Get(funcArguments, "department").String()
+	keyword := gjson.Get(funcArguments, "keyword").String()
+	limit := gjson.Get(funcArguments, "limit").Int()
+	res := NewPolicyNewsApi().GetPolicyNewsToMarkdown(department, keyword, int(limit))
+	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, res)
+	return nil
+}
+
+func handleGetPolicyNewsDetail(o *OpenAi, funcArguments string, ctx *ToolContext) error {
+	sendToolCallLog(ctx, "GetPolicyNewsDetail", funcArguments)
+	rawurl := gjson.Get(funcArguments, "url").String()
+	if rawurl == "" {
+		appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, "参数 url 不能为空")
+		return nil
+	}
+	res := NewPolicyNewsApi().GetPolicyNewsDetail(rawurl)
+	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, res)
+	return nil
+}
+
+func handleSearchGovPolicyLibrary(o *OpenAi, funcArguments string, ctx *ToolContext) error {
+	sendToolCallLog(ctx, "SearchGovPolicyLibrary", funcArguments)
+	keyword := gjson.Get(funcArguments, "keyword").String()
+	searchField := gjson.Get(funcArguments, "searchField").String()
+	department := gjson.Get(funcArguments, "department").String()
+	category := gjson.Get(funcArguments, "category").String()
+	sortBy := gjson.Get(funcArguments, "sortBy").String()
+	page := gjson.Get(funcArguments, "page").Int()
+	limit := gjson.Get(funcArguments, "limit").Int()
+	if page < 1 {
+		page = 1
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	res := NewGovPolicyLibApi().SearchGovPolicyLibraryToMarkdown(keyword, searchField, department, category, sortBy, int(page), int(limit))
+	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, res)
 	return nil
 }
 
@@ -551,7 +653,11 @@ func handleQueryEvent(o *OpenAi, funcArguments string, ctx *ToolContext) error {
 func handleSearchNews(o *OpenAi, funcArguments string, ctx *ToolContext) error {
 	sendToolCallLog(ctx, "SearchNews", funcArguments)
 	query := gjson.Get(funcArguments, "query").String()
-	md := NewIwencaiAPI().QueryToMarkdown(query, 1, 10)
+	if query == "" {
+		appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, "请输入搜索关键词")
+		return nil
+	}
+	md := NewIwencaiAPI().SearchNewsToMarkdown(query)
 	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, md)
 	return nil
 }
@@ -559,7 +665,11 @@ func handleSearchNews(o *OpenAi, funcArguments string, ctx *ToolContext) error {
 func handleSearchInvestor(o *OpenAi, funcArguments string, ctx *ToolContext) error {
 	sendToolCallLog(ctx, "SearchInvestor", funcArguments)
 	query := gjson.Get(funcArguments, "query").String()
-	md := NewIwencaiAPI().QueryToMarkdown(query, 1, 10)
+	if query == "" {
+		appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, "请输入搜索关键词")
+		return nil
+	}
+	md := NewIwencaiAPI().SearchInvestorToMarkdown(query)
 	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, md)
 	return nil
 }
@@ -567,7 +677,11 @@ func handleSearchInvestor(o *OpenAi, funcArguments string, ctx *ToolContext) err
 func handleSearchReport(o *OpenAi, funcArguments string, ctx *ToolContext) error {
 	sendToolCallLog(ctx, "SearchReport", funcArguments)
 	query := gjson.Get(funcArguments, "query").String()
-	md := NewIwencaiAPI().QueryToMarkdown(query, 1, 10)
+	if query == "" {
+		appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, "请输入搜索关键词")
+		return nil
+	}
+	md := NewIwencaiAPI().SearchReportToMarkdown(query)
 	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, md)
 	return nil
 }
@@ -617,7 +731,17 @@ func handleF10ToolCall(funcName string, funcArguments string, ctx *ToolContext, 
 }
 
 func handleGetStockLatestFinance(o *OpenAi, funcArguments string, ctx *ToolContext) error {
+	stockCode := gjson.Get(funcArguments, "stockCode").String()
+	// 港股代码自动路由到港股专用工具，避免 AI 误用 A 股 HSF10 接口
+	// 支持纯 5 位数字（如 00700）、.HK 后缀、HK 前缀等格式
+	if IsHKCodeForRoute(stockCode) {
+		return handleF10ToolCall("GetStockLatestFinance", funcArguments, ctx, NewStockDataApi().GetHKStockLatestFinanceToMarkdown)
+	}
 	return handleF10ToolCall("GetStockLatestFinance", funcArguments, ctx, NewStockDataApi().GetStockLatestFinanceToMarkdown)
+}
+
+func handleGetHKStockLatestFinance(o *OpenAi, funcArguments string, ctx *ToolContext) error {
+	return handleF10ToolCall("GetHKStockLatestFinance", funcArguments, ctx, NewStockDataApi().GetHKStockLatestFinanceToMarkdown)
 }
 
 func handleGetStockQtrMainFinance(o *OpenAi, funcArguments string, ctx *ToolContext) error {
